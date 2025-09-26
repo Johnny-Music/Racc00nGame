@@ -31,6 +31,7 @@ public class PlayerMovementCC : MonoBehaviour
 
     void Update()
     {
+        if (PauseMenu.GameIsPaused) return;
         HandleInput();
         HandleAnimations();
         HandleFlip();
