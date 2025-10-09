@@ -5,6 +5,7 @@ TagManager:
   serializedVersion: 3
   tags:
   - canPickUp
+  - Prop
   layers:
   - Default
   - TransparentFX
