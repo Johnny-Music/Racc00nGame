@@ -1,7 +1,4 @@
 using UnityEngine;
-using System.Collections;
-using System.Collections.Generic;
-
 
 [RequireComponent(typeof(CharacterController))]
 public class PlayerMovementCC : MonoBehaviour
@@ -20,7 +17,6 @@ public class PlayerMovementCC : MonoBehaviour
     public bool onHindLegs = false;
     public bool wasOnHindLegsBeforePickup = false;
 
-
     void Awake()
     {
         controller = GetComponent<CharacterController>();
@@ -32,9 +28,14 @@ public class PlayerMovementCC : MonoBehaviour
     void Update()
     {
         if (PauseMenu.GameIsPaused) return;
+
         HandleInput();
         HandleAnimations();
         HandleFlip();
+    }
+
+    void FixedUpdate()
+    {
         MovePlayer();
     }
 
@@ -45,86 +46,60 @@ public class PlayerMovementCC : MonoBehaviour
 
         inputDir = new Vector3(x, 0f, z).normalized;
 
-        // Snap to 0 if input is tiny (avoids drifting)
         if (inputDir.magnitude < 0.1f)
             inputDir = Vector3.zero;
 
         if (Input.GetKeyDown(KeyCode.LeftControl))
         {
-            // Check if holding an object
             bool isHolding = GetComponent<ItemPickup>().HoldingObject();
 
             if (isHolding)
-            {
-                // Force standing if holding something
                 onHindLegs = true;
-            }
             else
-            {
-                // Toggle if not holding
                 onHindLegs = !onHindLegs;
-            }
 
             animator.SetBool("isStanding", onHindLegs);
         }
-
-
     }
 
     void MovePlayer()
     {
         Vector3 moveDir = inputDir;
 
-        // Slope adjustment
-        RaycastHit hit;
-        if (controller.isGrounded && Physics.Raycast(transform.position, Vector3.down, out hit, 1.5f))
+        // --- Slope handling ---
+        if (controller.isGrounded)
         {
-            Vector3 slopeNormal = hit.normal;
-
-            // Project movement onto slope
-            Vector3 slopeDir = Vector3.ProjectOnPlane(moveDir, slopeNormal).normalized;
-
-            // Check if the player is trying to walk uphill
-            float uphillFactor = Vector3.Dot(slopeNormal, Vector3.up); // 1 = flat, 0 = vertical wall
-            float slopeAngle = Vector3.Angle(slopeNormal, Vector3.up); // in degrees
-
-            // Dot product between input and slope direction
-            bool isUphill = Vector3.Dot(moveDir, slopeNormal) < 0;
-
-            if (isUphill)
+            RaycastHit hit;
+            if (Physics.Raycast(transform.position, Vector3.down, out hit, 1.5f))
             {
-                // Apply slowdown based on steepness
-                float slopeMultiplier = Mathf.Clamp01(1f - (slopeAngle / 60f)); // tune 60f as needed
-                moveDir = slopeDir * slopeMultiplier;
-            }
-            else
-            {
-                // If not uphill, just project input onto slope without slowdown
-                moveDir = slopeDir;
+                Vector3 slopeNormal = hit.normal;
+                moveDir = Vector3.ProjectOnPlane(moveDir, slopeNormal).normalized;
+
+                float slopeAngle = Vector3.Angle(slopeNormal, Vector3.up);
+                float slopeMultiplier = Mathf.Clamp01(1f - (slopeAngle / 60f));
+                moveDir *= slopeMultiplier;
             }
         }
 
-        // Smooth horizontal movement
+        // --- Smooth horizontal movement (time-independent) ---
         Vector3 targetVelocity = moveDir * speed;
         Vector3 currentHorizontal = new Vector3(velocity.x, 0, velocity.z);
-        Vector3 smoothed = Vector3.Lerp(currentHorizontal, targetVelocity, Time.deltaTime * 10f);
+        Vector3 smoothed = Vector3.Lerp(currentHorizontal, targetVelocity, 0.2f); // fixed smoothing factor
 
-        // Apply gravity
+        // --- Gravity ---
         if (controller.isGrounded)
         {
-            if (velocity.y < 0)
-                velocity.y = -2f;
+            velocity.y = -2f; // small downward force to stay grounded
         }
         else
         {
-            velocity.y += gravity * Time.deltaTime;
+            velocity.y += gravity * Time.fixedDeltaTime;
         }
 
-        // Update full velocity
+        // --- Final velocity & move ---
         velocity = new Vector3(smoothed.x, velocity.y, smoothed.z);
-        controller.Move(velocity * Time.deltaTime);
+        controller.Move(velocity * Time.fixedDeltaTime);
     }
-
 
     void HandleAnimations()
     {
@@ -141,12 +116,12 @@ public class PlayerMovementCC : MonoBehaviour
             transform.localScale = scale;
         }
     }
-    
+
     public Vector3 GetMovementDirection()
     {
         return inputDir;
     }
-    
+
     public void SetStanding(bool state)
     {
         onHindLegs = state;

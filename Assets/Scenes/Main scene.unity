@@ -15943,7 +15943,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   player: {fileID: 1875818504}
   holdPos: {fileID: 1797145655}
-  throwForce: 20
+  throwForce: 10
   pickUpRange: 1.5
 --- !u!212 &1875818507
 SpriteRenderer:
