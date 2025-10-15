@@ -59,15 +59,20 @@ public class ItemPickup : MonoBehaviour
 
     void PickUpObject(GameObject pickUpObj)
     {
-        if (pickUpObj.GetComponent<Rigidbody>())
+        Rigidbody rb = pickUpObj.GetComponentInParent<Rigidbody>(); // ✅ get rigidbody even if it's on a parent
+        if (rb != null)
         {
-            heldObj = pickUpObj;
-            heldObjRb = pickUpObj.GetComponent<Rigidbody>();
-            heldObjRb.isKinematic = true;
-            heldObjRb.transform.parent = holdPos.transform;
+            heldObjRb = rb;
+            heldObj = rb.gameObject; // ✅ hold the rigidbody's root object
 
-            Physics.IgnoreCollision(heldObj.GetComponent<Collider>(), player.GetComponent<Collider>(), true);
+            heldObjRb.isKinematic = true;
+            heldObj.transform.parent = holdPos;
+
+            Collider col = heldObj.GetComponent<Collider>();
+            if (col != null)
+                Physics.IgnoreCollision(col, player.GetComponent<Collider>(), true);
         }
+        Debug.Log("Picking up: " + heldObj.name);
     }
 
     void DropObject()
