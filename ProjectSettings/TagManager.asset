@@ -6,6 +6,7 @@ TagManager:
   tags:
   - canPickUp
   - Prop
+  - canPull
   layers:
   - Default
   - TransparentFX
