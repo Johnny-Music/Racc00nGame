@@ -18,6 +18,8 @@ public class ItemPickup : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.E))
         {
+            var movement = player.GetComponent<PlayerMovement>();
+
             if (heldObj == null)
             {
                 Collider[] nearbyObjects = Physics.OverlapSphere(transform.position, pickUpRange);
@@ -26,22 +28,18 @@ public class ItemPickup : MonoBehaviour
                 {
                     if (col.CompareTag("canPickUp"))
                     {
-                        var movement = player.GetComponent<PlayerMovementCC>();
                         movement.wasOnHindLegsBeforePickup = movement.onHindLegs;
                         movement.SetStanding(true);
-
                         PickUpObject(col.gameObject);
                         break;
                     }
                 }
             }
-            else
+            else if (canDrop)
             {
-                if (canDrop)
-                {
-                    StopClipping();
-                    DropObject();
-                }
+                StopClipping();
+                DropObject();
+                movement.SetStanding(movement.wasOnHindLegsBeforePickup);
             }
         }
 
@@ -59,11 +57,11 @@ public class ItemPickup : MonoBehaviour
 
     void PickUpObject(GameObject pickUpObj)
     {
-        Rigidbody rb = pickUpObj.GetComponentInParent<Rigidbody>(); // ✅ get rigidbody even if it's on a parent
+        Rigidbody rb = pickUpObj.GetComponentInParent<Rigidbody>();
         if (rb != null)
         {
             heldObjRb = rb;
-            heldObj = rb.gameObject; // ✅ hold the rigidbody's root object
+            heldObj = rb.gameObject;
 
             heldObjRb.isKinematic = true;
             heldObj.transform.parent = holdPos;
@@ -71,67 +69,69 @@ public class ItemPickup : MonoBehaviour
             Collider col = heldObj.GetComponent<Collider>();
             if (col != null)
                 Physics.IgnoreCollision(col, player.GetComponent<Collider>(), true);
+
+            Debug.Log("Picked up: " + heldObj.name);
         }
-        Debug.Log("Picking up: " + heldObj.name);
     }
 
     void DropObject()
     {
-        Physics.IgnoreCollision(heldObj.GetComponent<Collider>(), player.GetComponent<Collider>(), false);
+        if (heldObj == null) return;
+
+        Collider col = heldObj.GetComponent<Collider>();
+        if (col != null)
+            Physics.IgnoreCollision(col, player.GetComponent<Collider>(), false);
+
         heldObjRb.isKinematic = false;
         heldObj.transform.parent = null;
 
         heldObj = null;
         heldObjRb = null;
-
-        player.GetComponent<PlayerMovementCC>().SetStanding(
-            player.GetComponent<PlayerMovementCC>().wasOnHindLegsBeforePickup
-        );
     }
 
     void MoveObject()
     {
-        heldObj.transform.position = holdPos.transform.position;
+        if (heldObj != null)
+            heldObj.transform.position = holdPos.position;
     }
 
     void ThrowObject()
     {
-        Physics.IgnoreCollision(heldObj.GetComponent<Collider>(), player.GetComponent<Collider>(), false);
+        if (heldObj == null) return;
+
+        Collider col = heldObj.GetComponent<Collider>();
+        if (col != null)
+            Physics.IgnoreCollision(col, player.GetComponent<Collider>(), false);
 
         heldObjRb.isKinematic = false;
         heldObj.transform.parent = null;
 
-        Vector3 moveDirection = player.GetComponent<PlayerMovementCC>().GetMovementDirection();
-
+        Vector3 moveDirection = player.GetComponent<PlayerMovement>().GetMovementDirection();
         if (moveDirection.magnitude < 0.1f)
             moveDirection = Vector3.up;
 
         Vector3 throwDirection = (moveDirection.normalized + Vector3.up * 1.2f).normalized;
-
         heldObjRb.AddForce(throwDirection * throwForce, ForceMode.Impulse);
         heldObjRb.AddTorque(Random.onUnitSphere * 1f, ForceMode.Impulse);
 
+        var movement = player.GetComponent<PlayerMovement>();
+        movement.SetStanding(movement.wasOnHindLegsBeforePickup);
+
         heldObj = null;
         heldObjRb = null;
-
-        player.GetComponent<PlayerMovementCC>().SetStanding(
-            player.GetComponent<PlayerMovementCC>().wasOnHindLegsBeforePickup
-        );
     }
 
     void StopClipping()
     {
-        float clipRange = Vector3.Distance(heldObj.transform.position, transform.position);
-        RaycastHit[] hits = Physics.RaycastAll(transform.position, transform.TransformDirection(Vector3.forward), clipRange);
+        if (heldObj == null) return;
 
+        float clipRange = Vector3.Distance(heldObj.transform.position, transform.position);
+        RaycastHit[] hits = Physics.RaycastAll(transform.position, transform.forward, clipRange);
         if (hits.Length > 1)
         {
-            heldObj.transform.position = transform.position + new Vector3(0f, -0.5f, 0f);
+            heldObj.transform.position = transform.position + Vector3.down * 0.5f;
         }
     }
 
-    public bool HoldingObject()
-    {
-        return heldObj != null;
-    }
+    public bool HoldingObject() => heldObj != null;
 }

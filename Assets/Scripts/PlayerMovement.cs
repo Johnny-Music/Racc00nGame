@@ -4,13 +4,9 @@ using UnityEngine;
 public class PlayerMovement : MonoBehaviour
 {
     [Header("Movement Settings")]
-    public float speed = 5f;                    
-    public float airControlMultiplier = 0.6f;   
-    public float stopLerpFactor = 0.15f;        
-
-    [Header("Step Settings")]
-    public float maxStepHeight = 0.35f;         // Max height player can step up
-    public float stepCheckDistance = 0.5f;      // How far forward to check for steps
+    public float speed = 5f;
+    public float airControlMultiplier = 0.6f;
+    public float stopLerpFactor = 0.15f;
 
     [Header("References")]
     public SpriteRenderer sr;
@@ -26,6 +22,17 @@ public class PlayerMovement : MonoBehaviour
 
     [Header("Standing State")]
     public bool onHindLegs = false;
+    public bool wasOnHindLegsBeforePickup = false;
+
+    [Header("Step Climbing Settings")]
+    public float maxStepHeight = 0.4f;         // Maximum height the player can step over
+    public float stepCheckDistance = 0.3f;     // Distance to check forward for steps
+    
+    [Header("Pulling Mode")]
+    public bool isPulling = false;
+    public float pullSpeed = 2f;   // speed when dragging
+    private Vector3 lastMoveDir = Vector3.zero;
+
 
     void Awake()
     {
@@ -49,11 +56,11 @@ public class PlayerMovement : MonoBehaviour
     void FixedUpdate()
     {
         MovePlayer();
-        HandleStepClimbing();
 
-        // Keep player grounded
         if (isGrounded)
             rb.AddForce(Vector3.down * 5f, ForceMode.Acceleration);
+
+        HandleStepClimbing(); // ✅ Call step climbing here
     }
 
     void HandleInput()
@@ -75,61 +82,32 @@ public class PlayerMovement : MonoBehaviour
 
     void MovePlayer()
     {
+        float currentSpeed = isPulling ? pullSpeed : speed;
         float control = isGrounded ? 1f : airControlMultiplier;
-        Vector3 targetVelocity = inputDir * speed * control;
+        Vector3 targetVelocity = inputDir * currentSpeed * control;
 
         if (isGrounded)
         {
-            RaycastHit hit;
-            if (Physics.Raycast(transform.position + Vector3.up * 0.1f, Vector3.down, out hit, groundRayLength, groundMask))
+            if (Physics.Raycast(transform.position + Vector3.up * 0.1f, Vector3.down, out RaycastHit hit, groundRayLength, groundMask))
             {
                 targetVelocity = Vector3.ProjectOnPlane(targetVelocity, hit.normal);
             }
         }
 
-        // Smooth horizontal velocity for soft stop
         Vector3 horizontalVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
         Vector3 newHorizontalVelocity = Vector3.Lerp(horizontalVelocity, targetVelocity, stopLerpFactor);
 
         rb.linearVelocity = new Vector3(newHorizontalVelocity.x, rb.linearVelocity.y, newHorizontalVelocity.z);
+
+        if (inputDir.magnitude > 0.1f)
+            lastMoveDir = inputDir;
     }
-
-    void HandleStepClimbing()
-    {
-        if (!isGrounded || inputDir.magnitude == 0) return;
-
-        Vector3 moveDir = inputDir.normalized;
-        float capsuleRadius = 0.3f;
-        float stepTopHeight = maxStepHeight;
-
-        Vector3 bottom = transform.position + Vector3.up * 0.05f;
-        Vector3 top = bottom + Vector3.up * maxStepHeight;
-
-        // 1️⃣ Check if horizontal movement is already free
-        if (!Physics.CapsuleCast(bottom, top, capsuleRadius, moveDir, stepCheckDistance, groundMask))
-        {
-            // Nothing blocking at current height, no need to step up
-            return;
-        }
-
-        // 2️⃣ Check if there is space above the step
-        Vector3 stepCheckBottom = bottom + Vector3.up * maxStepHeight;
-        Vector3 stepCheckTop = top + Vector3.up * maxStepHeight;
-        if (!Physics.CapsuleCast(stepCheckBottom, stepCheckTop, capsuleRadius, moveDir, stepCheckDistance, groundMask))
-        {
-            // Safe to step up, move Rigidbody by maxStepHeight
-            rb.position += Vector3.up * maxStepHeight;
-        }
-    }
-
-
 
     void CheckGrounded()
     {
         Vector3 origin = transform.position + Vector3.up * 0.1f;
         bool sphereHit = Physics.CheckSphere(groundCheck.position, groundCheckRadius, groundMask);
         bool rayHit = Physics.Raycast(origin, Vector3.down, groundRayLength, groundMask);
-
         isGrounded = sphereHit || rayHit;
     }
 
@@ -141,11 +119,51 @@ public class PlayerMovement : MonoBehaviour
 
     void HandleFlip()
     {
-        if (inputDir.x != 0)
+        // Regular facing logic
+        if (!isPulling && inputDir.x != 0)
         {
             Vector3 scale = transform.localScale;
             scale.x = (inputDir.x < 0) ? -Mathf.Abs(scale.x) : Mathf.Abs(scale.x);
             transform.localScale = scale;
+        }
+        else if (isPulling)
+        {
+            // Face opposite of movement direction
+            if (inputDir.x != 0)
+            {
+                Vector3 scale = transform.localScale;
+                scale.x = (inputDir.x > 0) ? -Mathf.Abs(scale.x) : Mathf.Abs(scale.x);
+                transform.localScale = scale;
+            }
+        }
+    }
+
+    // ✅ Step Climbing Function
+    void HandleStepClimbing()
+    {
+        if (!isGrounded || inputDir.magnitude == 0) return;
+
+        Vector3 moveDir = inputDir.normalized;
+        float capsuleRadius = 0.3f;
+        float padding = 0.02f; // small buffer to ensure the player clears the step
+
+        // Bottom and top of capsule at current height (foot level)
+        Vector3 bottom = transform.position + Vector3.up * 0.05f;
+        Vector3 top = bottom + Vector3.up * 0.05f; // thin slice at feet
+
+        // 1) Check if horizontal movement at foot level is blocked
+        bool blocked = Physics.CapsuleCast(bottom, top, capsuleRadius, moveDir, stepCheckDistance, groundMask);
+        if (!blocked) return;
+
+        // 2) Check if space above the obstacle is free for stepping (at maxStepHeight)
+        Vector3 stepCheckBottom = bottom + Vector3.up * maxStepHeight;
+        Vector3 stepCheckTop = top + Vector3.up * maxStepHeight;
+
+        if (!Physics.CapsuleCast(stepCheckBottom, stepCheckTop, capsuleRadius, moveDir, stepCheckDistance, groundMask))
+        {
+            // Safe to step up → move Rigidbody by maxStepHeight + padding
+            rb.position += Vector3.up * (maxStepHeight + padding);
+            rb.position += moveDir * 0.05f; // small forward nudge
         }
     }
 
