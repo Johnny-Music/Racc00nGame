@@ -82,9 +82,8 @@ public class PlayerMovement : MonoBehaviour
 
     void MovePlayer()
     {
-        float currentSpeed = isPulling ? pullSpeed : speed;
         float control = isGrounded ? 1f : airControlMultiplier;
-        Vector3 targetVelocity = inputDir * currentSpeed * control;
+        Vector3 targetVelocity = inputDir * speed * control;
 
         if (isGrounded)
         {
@@ -98,9 +97,6 @@ public class PlayerMovement : MonoBehaviour
         Vector3 newHorizontalVelocity = Vector3.Lerp(horizontalVelocity, targetVelocity, stopLerpFactor);
 
         rb.linearVelocity = new Vector3(newHorizontalVelocity.x, rb.linearVelocity.y, newHorizontalVelocity.z);
-
-        if (inputDir.magnitude > 0.1f)
-            lastMoveDir = inputDir;
     }
 
     void CheckGrounded()
@@ -119,22 +115,11 @@ public class PlayerMovement : MonoBehaviour
 
     void HandleFlip()
     {
-        // Regular facing logic
-        if (!isPulling && inputDir.x != 0)
+        if (inputDir.x != 0)
         {
             Vector3 scale = transform.localScale;
             scale.x = (inputDir.x < 0) ? -Mathf.Abs(scale.x) : Mathf.Abs(scale.x);
             transform.localScale = scale;
-        }
-        else if (isPulling)
-        {
-            // Face opposite of movement direction
-            if (inputDir.x != 0)
-            {
-                Vector3 scale = transform.localScale;
-                scale.x = (inputDir.x > 0) ? -Mathf.Abs(scale.x) : Mathf.Abs(scale.x);
-                transform.localScale = scale;
-            }
         }
     }
 
